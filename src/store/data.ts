@@ -56,12 +56,15 @@ export interface Maintenance {
 export interface FuelLog {
   id: string;
   vehicleId: string;
-  driverId: string;
+  driverId?: string;
   date: string;
-  gallons: number;
+  quantity: number; // Liters
   cost: number;
-  location: string;
+  fuelStation?: string;
+  fuelType: 'Diesel' | 'Petrol' | 'CNG' | 'Electric';
+  notes?: string;
   odometer: number;
+  expenseId: string;
 }
 
 export interface Expense {
@@ -72,6 +75,7 @@ export interface Expense {
   description: string;
   vehicleId?: string;
   driverId?: string;
+  fuelLogId?: string;
 }
 
 interface DataState {
@@ -96,14 +100,16 @@ interface DataState {
   createMaintenance: (log: Omit<Maintenance, 'id' | 'status'>) => void;
   updateMaintenanceStatus: (id: string, status: Maintenance['status'], actualCost?: number) => void;
   
-  addFuelLog: (log: Omit<FuelLog, 'id'>) => void;
+  addFuelLog: (log: Omit<FuelLog, 'id' | 'expenseId'>) => void;
+  updateFuelLog: (id: string, log: Partial<FuelLog>) => void;
+  deleteFuelLog: (id: string) => void;
   addExpense: (expense: Omit<Expense, 'id'>) => void;
 }
 
 const mockVehicles: Vehicle[] = [
-  { id: 'v1', registrationNumber: 'TR-1001', name: 'Volvo FH16', model: '2023', type: 'Heavy Truck', maxLoadCapacity: 40000, currentOdometer: 15000, status: 'Available' },
-  { id: 'v2', registrationNumber: 'TR-1002', name: 'Scania R500', model: '2022', type: 'Heavy Truck', maxLoadCapacity: 35000, currentOdometer: 45000, status: 'On Trip' },
-  { id: 'v3', registrationNumber: 'VN-2001', name: 'Mercedes Sprinter', model: '2023', type: 'Van', maxLoadCapacity: 3500, currentOdometer: 8000, status: 'In Shop' },
+  { id: 'v1', registrationNumber: 'TR-1001', name: 'Volvo FH16', model: '2023', type: 'Heavy Truck', maxLoadCapacity: 40000, currentOdometer: 17000, status: 'Available', acquisitionCost: 150000 },
+  { id: 'v2', registrationNumber: 'TR-1002', name: 'Scania R500', model: '2022', type: 'Heavy Truck', maxLoadCapacity: 35000, currentOdometer: 46600, status: 'On Trip', acquisitionCost: 135000 },
+  { id: 'v3', registrationNumber: 'VN-2001', name: 'Mercedes Sprinter', model: '2023', type: 'Van', maxLoadCapacity: 3500, currentOdometer: 9200, status: 'In Shop', acquisitionCost: 45000 },
 ];
 
 const mockDrivers: Driver[] = [
@@ -113,20 +119,38 @@ const mockDrivers: Driver[] = [
 ];
 
 const mockTrips: Trip[] = [
-  { id: 't1', source: 'New York, NY', destination: 'Boston, MA', vehicleId: 'v2', driverId: 'd2', cargoWeight: 25000, plannedDistance: 215, status: 'Dispatched', date: new Date().toISOString() }
+  { id: 't1', source: 'New York, NY', destination: 'Boston, MA', vehicleId: 'v2', driverId: 'd2', cargoWeight: 25000, plannedDistance: 215, status: 'Completed', date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString() }
 ];
 
 const mockMaintenance: Maintenance[] = [
-  { id: 'm1', vehicleId: 'v3', issue: 'Engine light ON', serviceType: 'Diagnostics', mechanic: 'Bob', estimatedCost: 150, date: new Date().toISOString(), status: 'Open' }
+  { id: 'm1', vehicleId: 'v3', issue: 'Engine light ON', serviceType: 'Diagnostics', mechanic: 'Bob', estimatedCost: 150, date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), status: 'Completed', actualCost: 180 }
 ];
 
 const mockFuelLogs: FuelLog[] = [
-  { id: 'f1', vehicleId: 'v1', driverId: 'd1', date: new Date().toISOString(), gallons: 50, cost: 180, location: 'Pilot Station', odometer: 15000 }
+  { id: 'f1', vehicleId: 'v1', driverId: 'd1', date: '2026-06-01T08:00:00.000Z', quantity: 200, cost: 360, fuelStation: 'Shell Station', fuelType: 'Diesel', odometer: 15000, expenseId: 'e_f1', notes: 'Initial fuel fill-up.' },
+  { id: 'f2', vehicleId: 'v1', driverId: 'd1', date: '2026-06-15T12:30:00.000Z', quantity: 220, cost: 396, fuelStation: 'Shell Station', fuelType: 'Diesel', odometer: 16000, expenseId: 'e_f2' },
+  { id: 'f3', vehicleId: 'v1', driverId: 'd1', date: '2026-07-01T10:15:00.000Z', quantity: 210, cost: 378, fuelStation: 'BP Station', fuelType: 'Diesel', odometer: 17000, expenseId: 'e_f3' },
+  
+  { id: 'f4', vehicleId: 'v2', driverId: 'd2', date: '2026-06-05T09:00:00.000Z', quantity: 180, cost: 324, fuelStation: 'Pilot Station', fuelType: 'Diesel', odometer: 45000, expenseId: 'e_f4' },
+  { id: 'f5', vehicleId: 'v2', driverId: 'd2', date: '2026-06-20T14:45:00.000Z', quantity: 190, cost: 342, fuelStation: 'Pilot Station', fuelType: 'Diesel', odometer: 45800, expenseId: 'e_f5' },
+  { id: 'f6', vehicleId: 'v2', driverId: 'd2', date: '2026-07-05T11:00:00.000Z', quantity: 185, cost: 333, fuelStation: 'Shell Station', fuelType: 'Diesel', odometer: 46600, expenseId: 'e_f6' },
+  
+  { id: 'f7', vehicleId: 'v3', driverId: 'd1', date: '2026-06-10T16:20:00.000Z', quantity: 60, cost: 108, fuelStation: 'Exxon Station', fuelType: 'Petrol', odometer: 8000, expenseId: 'e_f7' },
+  { id: 'f8', vehicleId: 'v3', driverId: 'd2', date: '2026-06-25T10:00:00.000Z', quantity: 65, cost: 117, fuelStation: 'Exxon Station', fuelType: 'Petrol', odometer: 8600, expenseId: 'e_f8' },
+  { id: 'f9', vehicleId: 'v3', driverId: 'd1', date: '2026-07-10T15:30:00.000Z', quantity: 62, cost: 111.6, fuelStation: 'Chevron Station', fuelType: 'Petrol', odometer: 9200, expenseId: 'e_f9' }
 ];
 
 const mockExpenses: Expense[] = [
-  { id: 'e1', date: new Date().toISOString(), amount: 150, category: 'Maintenance', description: 'Diagnostics fee', vehicleId: 'v3' },
-  { id: 'e2', date: new Date().toISOString(), amount: 180, category: 'Fuel', description: 'Diesel refill', vehicleId: 'v1', driverId: 'd1' }
+  { id: 'e1', date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), amount: 180, category: 'Maintenance', description: 'Maintenance: Diagnostics - Engine light ON', vehicleId: 'v3' },
+  { id: 'e_f1', date: '2026-06-01T08:00:00.000Z', amount: 360, category: 'Fuel', description: 'Fuel: 200 L (Diesel) at Shell Station', vehicleId: 'v1', driverId: 'd1', fuelLogId: 'f1' },
+  { id: 'e_f2', date: '2026-06-15T12:30:00.000Z', amount: 396, category: 'Fuel', description: 'Fuel: 220 L (Diesel) at Shell Station', vehicleId: 'v1', driverId: 'd1', fuelLogId: 'f2' },
+  { id: 'e_f3', date: '2026-07-01T10:15:00.000Z', amount: 378, category: 'Fuel', description: 'Fuel: 210 L (Diesel) at BP Station', vehicleId: 'v1', driverId: 'd1', fuelLogId: 'f3' },
+  { id: 'e_f4', date: '2026-06-05T09:00:00.000Z', amount: 324, category: 'Fuel', description: 'Fuel: 180 L (Diesel) at Pilot Station', vehicleId: 'v2', driverId: 'd2', fuelLogId: 'f4' },
+  { id: 'e_f5', date: '2026-06-20T14:45:00.000Z', amount: 342, category: 'Fuel', description: 'Fuel: 190 L (Diesel) at Pilot Station', vehicleId: 'v2', driverId: 'd2', fuelLogId: 'f5' },
+  { id: 'e_f6', date: '2026-07-05T11:00:00.000Z', amount: 333, category: 'Fuel', description: 'Fuel: 185 L (Diesel) at Shell Station', vehicleId: 'v2', driverId: 'd2', fuelLogId: 'f6' },
+  { id: 'e_f7', date: '2026-06-10T16:20:00.000Z', amount: 108, category: 'Fuel', description: 'Fuel: 60 L (Petrol) at Exxon Station', vehicleId: 'v3', driverId: 'd1', fuelLogId: 'f7' },
+  { id: 'e_f8', date: '2026-06-25T10:00:00.000Z', amount: 117, category: 'Fuel', description: 'Fuel: 65 L (Petrol) at Exxon Station', vehicleId: 'v3', driverId: 'd2', fuelLogId: 'f8' },
+  { id: 'e_f9', date: '2026-07-10T15:30:00.000Z', amount: 111.6, category: 'Fuel', description: 'Fuel: 62 L (Petrol) at Chevron Station', vehicleId: 'v3', driverId: 'd1', fuelLogId: 'f9' }
 ];
 
 export const useDataStore = create<DataState>((set) => ({
@@ -217,19 +241,60 @@ export const useDataStore = create<DataState>((set) => ({
   }),
 
   addFuelLog: (log) => set((state) => {
-    const newLog = { ...log, id: `f${Date.now()}` };
+    const fuelLogId = `f${Date.now()}`;
+    const expenseId = `e${Date.now()}`;
+    const newLog: FuelLog = { ...log, id: fuelLogId, expenseId };
     const newExpense: Expense = {
-      id: `e${Date.now()}`,
+      id: expenseId,
       date: log.date,
       amount: log.cost,
       category: 'Fuel',
-      description: `Fuel: ${log.gallons} gal at ${log.location}`,
+      description: `Fuel: ${log.quantity} L (${log.fuelType}) at ${log.fuelStation || 'Station'}`,
       vehicleId: log.vehicleId,
-      driverId: log.driverId
+      driverId: log.driverId,
+      fuelLogId: fuelLogId
     };
     return {
       fuelLogs: [...state.fuelLogs, newLog],
       expenses: [...state.expenses, newExpense]
+    };
+  }),
+
+  updateFuelLog: (id, updatedLog) => set((state) => {
+    const fuelLogs = state.fuelLogs.map((log) => {
+      if (log.id === id) {
+        return { ...log, ...updatedLog } as FuelLog;
+      }
+      return log;
+    });
+
+    const log = state.fuelLogs.find(l => l.id === id);
+    if (!log) return { fuelLogs };
+
+    const expenses = state.expenses.map((exp) => {
+      if (exp.id === log.expenseId) {
+        return {
+          ...exp,
+          date: updatedLog.date ?? exp.date,
+          amount: updatedLog.cost ?? exp.amount,
+          description: `Fuel: ${updatedLog.quantity ?? log.quantity} L (${updatedLog.fuelType ?? log.fuelType}) at ${(updatedLog.fuelStation ?? log.fuelStation) || 'Station'}`,
+          vehicleId: updatedLog.vehicleId ?? exp.vehicleId,
+          driverId: updatedLog.driverId ?? exp.driverId
+        };
+      }
+      return exp;
+    });
+
+    return { fuelLogs, expenses };
+  }),
+
+  deleteFuelLog: (id) => set((state) => {
+    const log = state.fuelLogs.find(l => l.id === id);
+    if (!log) return state;
+
+    return {
+      fuelLogs: state.fuelLogs.filter(l => l.id !== id),
+      expenses: state.expenses.filter(e => e.id !== log.expenseId)
     };
   }),
 

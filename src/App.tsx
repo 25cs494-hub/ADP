@@ -8,6 +8,7 @@ import Drivers from '@/pages/Drivers';
 import Trips from '@/pages/Trips';
 import Maintenance from '@/pages/Maintenance';
 import FuelLogs from '@/pages/FuelLogs';
+import Reports from '@/pages/Reports';
 import Expenses from '@/pages/Expenses';
 import Analytics from '@/pages/Analytics';
 import AppLayout from '@/components/layout/AppLayout';
@@ -35,8 +36,9 @@ function App() {
           <Route path="drivers" element={<Drivers />} />
           <Route path="trips" element={<Trips />} />
           <Route path="maintenance" element={<Maintenance />} />
-          <Route path="fuel-logs" element={<FuelLogs />} />
+          <Route path="fuel-management" element={<FuelLogs />} />
           <Route path="expenses" element={<Expenses />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="analytics" element={<Analytics />} />
         </Route>
       </Routes>
