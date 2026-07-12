@@ -11,6 +11,7 @@ import FuelLogs from '@/pages/FuelLogs';
 import Reports from '@/pages/Reports';
 import Expenses from '@/pages/Expenses';
 import Analytics from '@/pages/Analytics';
+import Profile from '@/pages/Profile';
 import AppLayout from '@/components/layout/AppLayout';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -40,7 +41,7 @@ function App() {
           <Route path="expenses" element={<Expenses />} />
           <Route path="reports" element={<Reports />} />
           <Route path="analytics" element={<Analytics />} />
-          <Route path="reports" element={<Analytics />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
     </BrowserRouter>

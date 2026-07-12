@@ -184,7 +184,7 @@ export default function Analytics() {
 
       // Fuel logs for this vehicle in filtered fuel logs
       const vFuelLogs = filteredData.fuelLogs.filter(f => f.vehicleId === vehicle.id);
-      const fuelConsumed = vFuelLogs.reduce((sum, f) => sum + f.gallons, 0);
+      const fuelConsumed = vFuelLogs.reduce((sum, f) => sum + f.quantity, 0);
       const fuelCost = vFuelLogs.reduce((sum, f) => sum + f.cost, 0);
 
       // Fuel Efficiency = Distance / Fuel Consumed
@@ -238,7 +238,7 @@ export default function Analytics() {
   const kpiStats = useMemo(() => {
     const totalTrips = filteredData.trips.length;
     const totalDistance = filteredData.trips.reduce((sum, t) => sum + t.plannedDistance, 0);
-    const totalFuelConsumed = filteredData.fuelLogs.reduce((sum, f) => sum + f.gallons, 0);
+    const totalFuelConsumed = filteredData.fuelLogs.reduce((sum, f) => sum + f.quantity, 0);
     const totalFuelCost = filteredData.fuelLogs.reduce((sum, f) => sum + f.cost, 0);
     
     // Sum maintenance cost
