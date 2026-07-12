@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useNotificationStore } from './notifications';
 
 export type VehicleStatus = 'Available' | 'On Trip' | 'In Shop' | 'Retired';
 export type DriverStatus = 'Available' | 'On Trip' | 'Off Duty' | 'Suspended';
@@ -203,41 +204,200 @@ export const useDataStore = create<DataState>((set) => ({
   fuelLogs: mockFuelLogs,
   expenses: mockExpenses,
 
-  addVehicle: (vehicle) => set((state) => ({ 
-    vehicles: [...state.vehicles, { ...vehicle, id: `v${Date.now()}` }] 
-  })),
-  updateVehicle: (id, vehicle) => set((state) => ({
-    vehicles: state.vehicles.map(v => v.id === id ? { ...v, ...vehicle } : v)
-  })),
+  addVehicle: (vehicle) => set((state) => {
+    const newId = `v${Date.now()}`;
+    useNotificationStore.getState().addNotification({
+      title: 'Vehicle Registered Successfully',
+      description: `Vehicle ${vehicle.registrationNumber} (${vehicle.name}) has been registered to the fleet registry.`,
+      category: 'success',
+      roles: ['Fleet Manager'],
+      priority: 'low'
+    });
+    return { 
+      vehicles: [...state.vehicles, { ...vehicle, id: newId }] 
+    };
+  }),
+
+  updateVehicle: (id, vehicle) => set((state) => {
+    const prevVehicle = state.vehicles.find(v => v.id === id);
+    if (prevVehicle && vehicle.status === 'Retired' && prevVehicle.status !== 'Retired') {
+      useNotificationStore.getState().addNotification({
+        title: 'Vehicle Retired',
+        description: `Vehicle ${prevVehicle.registrationNumber} (${prevVehicle.name}) has been marked as Retired from the active fleet.`,
+        category: 'info',
+        roles: ['Fleet Manager'],
+        priority: 'medium'
+      });
+    }
+    return {
+      vehicles: state.vehicles.map(v => v.id === id ? { ...v, ...vehicle } : v)
+    };
+  }),
+
   deleteVehicle: (id) => set((state) => ({
     vehicles: state.vehicles.filter(v => v.id !== id)
   })),
 
-  addDriver: (driver) => set((state) => ({ 
-    drivers: [...state.drivers, { ...driver, id: `d${Date.now()}` }] 
-  })),
-  updateDriver: (id, driver) => set((state) => ({
-    drivers: state.drivers.map(d => d.id === id ? { ...d, ...driver } : d)
-  })),
+  addDriver: (driver) => set((state) => {
+    const newId = `d${Date.now()}`;
+    useNotificationStore.getState().addNotification({
+      title: 'New Driver Registered',
+      description: `Driver ${driver.name} (License Category: ${driver.licenseCategory}) has been successfully added to the system.`,
+      category: 'success',
+      roles: ['Fleet Manager', 'Safety Officer'],
+      priority: 'low'
+    });
+    return { 
+      drivers: [...state.drivers, { ...driver, id: newId }] 
+    };
+  }),
+
+  updateDriver: (id, driver) => set((state) => {
+    const prevDriver = state.drivers.find(d => d.id === id);
+    if (prevDriver && driver.status === 'Suspended' && prevDriver.status !== 'Suspended') {
+      useNotificationStore.getState().addNotification({
+        title: 'Driver Suspended',
+        description: `Driver ${prevDriver.name} safety score has dropped or has been suspended by management.`,
+        category: 'error',
+        roles: ['Safety Officer', 'Fleet Manager'],
+        priority: 'high'
+      });
+    }
+    return {
+      drivers: state.drivers.map(d => d.id === id ? { ...d, ...driver } : d)
+    };
+  }),
+
   deleteDriver: (id) => set((state) => ({
     drivers: state.drivers.filter(d => d.id !== id)
   })),
 
-  createTrip: (trip) => set((state) => ({
-    trips: [...state.trips, { ...trip, id: `t${Date.now()}`, status: 'Draft' }]
-  })),
+  createTrip: (trip) => set((state) => {
+    const vehicle = state.vehicles.find(v => v.id === trip.vehicleId);
+    const driver = state.drivers.find(d => d.id === trip.driverId);
+    const notificationsStore = useNotificationStore.getState();
+    let hasError = false;
+
+    // Weight Constraint validation
+    if (vehicle && trip.cargoWeight > vehicle.maxLoadCapacity) {
+      notificationsStore.addNotification({
+        title: 'Cargo Exceeds Capacity',
+        description: `Trip dispatch failed: Cargo weight ${trip.cargoWeight} kg exceeds vehicle ${vehicle.registrationNumber} capacity of ${vehicle.maxLoadCapacity} kg.`,
+        category: 'error',
+        roles: ['Dispatcher', 'Safety Officer'],
+        priority: 'high'
+      });
+      hasError = true;
+    }
+
+    // Vehicle Availability Check
+    if (vehicle && vehicle.status === 'On Trip') {
+      notificationsStore.addNotification({
+        title: 'Vehicle Unavailable',
+        description: `Trip dispatch failed: Vehicle ${vehicle.registrationNumber} is already assigned to another active trip.`,
+        category: 'error',
+        roles: ['Dispatcher'],
+        priority: 'medium'
+      });
+      hasError = true;
+    }
+
+    // Driver Availability Check
+    if (driver && driver.status === 'On Trip') {
+      notificationsStore.addNotification({
+        title: 'Driver Unavailable',
+        description: `Trip dispatch failed: Driver ${driver.name} is already assigned to another active trip.`,
+        category: 'error',
+        roles: ['Dispatcher'],
+        priority: 'medium'
+      });
+      hasError = true;
+    }
+
+    if (hasError) {
+      return state;
+    }
+
+    const newTripId = `t${Date.now()}`;
+    notificationsStore.addNotification({
+      title: 'New Trip Created',
+      description: `New trip ${newTripId} has been created from ${trip.source} to ${trip.destination}.`,
+      category: 'success',
+      roles: ['Dispatcher', 'Fleet Manager'],
+      priority: 'low'
+    });
+
+    return {
+      trips: [...state.trips, { ...trip, id: newTripId, status: 'Draft' }]
+    };
+  }),
+
   updateTripStatus: (id, status) => set((state) => {
     const trip = state.trips.find(t => t.id === id);
     if (!trip) return state;
 
     let { vehicles, drivers } = state;
+    const vehicle = vehicles.find(v => v.id === trip.vehicleId);
+    const driver = drivers.find(d => d.id === trip.driverId);
+    const notificationsStore = useNotificationStore.getState();
 
     if (status === 'Dispatched') {
       vehicles = vehicles.map(v => v.id === trip.vehicleId ? { ...v, status: 'On Trip' as VehicleStatus } : v);
       drivers = drivers.map(d => d.id === trip.driverId ? { ...d, status: 'On Trip' as DriverStatus } : d);
+
+      notificationsStore.addNotification({
+        title: 'Trip Dispatched',
+        description: `Trip ${id} (${trip.source} -> ${trip.destination}) has been dispatched successfully.`,
+        category: 'info',
+        roles: ['Dispatcher', 'Fleet Manager'],
+        priority: 'medium'
+      });
+
+      notificationsStore.addNotification({
+        title: 'Vehicle status: On Trip',
+        description: `Vehicle ${vehicle?.registrationNumber} changed status to On Trip for Trip ${id}.`,
+        category: 'info',
+        roles: ['Fleet Manager'],
+        priority: 'low'
+      });
+
+      notificationsStore.addNotification({
+        title: 'Driver Assigned to Trip',
+        description: `Driver ${driver?.name} assigned to Trip ${id}.`,
+        category: 'info',
+        roles: ['Fleet Manager', 'Dispatcher'],
+        priority: 'low'
+      });
+
     } else if (status === 'Completed' || status === 'Cancelled') {
       vehicles = vehicles.map(v => v.id === trip.vehicleId ? { ...v, status: 'Available' as VehicleStatus } : v);
       drivers = drivers.map(d => d.id === trip.driverId ? { ...d, status: 'Available' as DriverStatus } : d);
+
+      if (status === 'Completed') {
+        notificationsStore.addNotification({
+          title: 'Trip Completed',
+          description: `Trip ${id} from ${trip.source} to ${trip.destination} has been completed successfully.`,
+          category: 'success',
+          roles: ['Dispatcher', 'Fleet Manager'],
+          priority: 'medium'
+        });
+
+        notificationsStore.addNotification({
+          title: 'Driver becomes available',
+          description: `Driver ${driver?.name} is now Available after completion of Trip ${id}.`,
+          category: 'success',
+          roles: ['Fleet Manager', 'Dispatcher'],
+          priority: 'low'
+        });
+      } else {
+        notificationsStore.addNotification({
+          title: 'Trip Cancelled',
+          description: `Trip ${id} has been cancelled by dispatcher.`,
+          category: 'warning',
+          roles: ['Dispatcher', 'Fleet Manager'],
+          priority: 'medium'
+        });
+      }
     }
 
     return {
@@ -248,8 +408,27 @@ export const useDataStore = create<DataState>((set) => ({
   }),
 
   createMaintenance: (log) => set((state) => {
-    const newLog: Maintenance = { ...log, id: `m${Date.now()}`, status: 'Open' };
+    const newId = `m${Date.now()}`;
+    const newLog: Maintenance = { ...log, id: newId, status: 'Open' };
     const vehicles = state.vehicles.map(v => v.id === log.vehicleId ? { ...v, status: 'In Shop' as VehicleStatus } : v);
+    const notificationsStore = useNotificationStore.getState();
+
+    notificationsStore.addNotification({
+      title: 'Maintenance Scheduled',
+      description: `Scheduled service (${log.serviceType}) created for vehicle ${log.vehicleId}.`,
+      category: 'info',
+      roles: ['Fleet Manager', 'Safety Officer'],
+      priority: 'low'
+    });
+
+    notificationsStore.addNotification({
+      title: 'Vehicle Status: In Shop',
+      description: `Vehicle ${log.vehicleId} moved to In Shop status for scheduled maintenance.`,
+      category: 'warning',
+      roles: ['Fleet Manager'],
+      priority: 'medium'
+    });
+
     return { maintenanceLogs: [...state.maintenanceLogs, newLog], vehicles };
   }),
 
@@ -258,9 +437,26 @@ export const useDataStore = create<DataState>((set) => ({
     if (!log) return state;
 
     let { vehicles } = state;
+    const notificationsStore = useNotificationStore.getState();
     
     if (status === 'Completed') {
       vehicles = vehicles.map(v => v.id === log.vehicleId ? { ...v, status: 'Available' as VehicleStatus } : v);
+
+      notificationsStore.addNotification({
+        title: 'Maintenance Completed',
+        description: `Service completed for vehicle ${log.vehicleId} (${log.serviceType}). Cost: $${actualCost || log.estimatedCost}.`,
+        category: 'success',
+        roles: ['Fleet Manager', 'Safety Officer'],
+        priority: 'medium'
+      });
+    } else if (status === 'In Progress') {
+      notificationsStore.addNotification({
+        title: 'Maintenance Started',
+        description: `Service is now In Progress for vehicle ${log.vehicleId} (${log.serviceType}).`,
+        category: 'info',
+        roles: ['Fleet Manager', 'Safety Officer'],
+        priority: 'low'
+      });
     }
 
     const expenses = [...state.expenses];
@@ -296,6 +492,47 @@ export const useDataStore = create<DataState>((set) => ({
       driverId: log.driverId,
       fuelLogId: fuelLogId
     };
+
+    const notificationsStore = useNotificationStore.getState();
+
+    // Trigger Success Notification
+    notificationsStore.addNotification({
+      title: 'Fuel Log Added Successfully',
+      description: `Logged ${log.quantity} Liters of ${log.fuelType} for vehicle ${log.vehicleId}.`,
+      category: 'success',
+      roles: ['Financial Analyst', 'Fleet Manager'],
+      priority: 'low'
+    });
+
+    // Check high cost alert limit ($350)
+    if (log.cost > 350) {
+      notificationsStore.addNotification({
+        title: 'Fuel Cost Exceeds Limit',
+        description: `Refueling transaction for ${log.vehicleId} at ${log.fuelStation || 'Station'} cost $${log.cost.toFixed(2)}, which exceeds the $350 limit.`,
+        category: 'warning',
+        roles: ['Financial Analyst', 'Fleet Manager'],
+        priority: 'medium'
+      });
+    }
+
+    // Check low fuel efficiency alert (calculated based on previous odometer)
+    const sortedLogs = [...state.fuelLogs, newLog].filter(l => l.vehicleId === log.vehicleId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    if (sortedLogs.length >= 2) {
+      const lastLog = sortedLogs[sortedLogs.length - 1];
+      const prevLog = sortedLogs[sortedLogs.length - 2];
+      const distance = lastLog.odometer - prevLog.odometer;
+      const efficiency = distance / lastLog.quantity;
+      if (efficiency < 4.0) {
+        notificationsStore.addNotification({
+          title: 'Fuel Efficiency Drop Alert',
+          description: `Vehicle ${log.vehicleId} average efficiency dropped to ${efficiency.toFixed(2)} km/L (configured threshold: 4.0 km/L).`,
+          category: 'warning',
+          roles: ['Financial Analyst', 'Fleet Manager'],
+          priority: 'medium'
+        });
+      }
+    }
+
     return {
       fuelLogs: [...state.fuelLogs, newLog],
       expenses: [...state.expenses, newExpense]
@@ -340,7 +577,20 @@ export const useDataStore = create<DataState>((set) => ({
     };
   }),
 
-  addExpense: (expense) => set((state) => ({
-    expenses: [...state.expenses, { ...expense, id: `e${Date.now()}` }]
-  }))
+  addExpense: (expense) => set((state) => {
+    const newId = `e${Date.now()}`;
+    const notificationsStore = useNotificationStore.getState();
+
+    notificationsStore.addNotification({
+      title: 'New Expense Recorded',
+      description: `Expense categorized under "${expense.category}" recorded for vehicle ${expense.vehicleId || 'N/A'}. Amount: $${expense.amount.toFixed(2)}.`,
+      category: 'success',
+      roles: ['Financial Analyst', 'Fleet Manager'],
+      priority: 'low'
+    });
+
+    return {
+      expenses: [...state.expenses, { ...expense, id: newId }]
+    };
+  })
 }));

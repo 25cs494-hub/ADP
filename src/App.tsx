@@ -11,7 +11,11 @@ import FuelLogs from '@/pages/FuelLogs';
 import Reports from '@/pages/Reports';
 import Expenses from '@/pages/Expenses';
 import Analytics from '@/pages/Analytics';
+<<<<<<< HEAD
 import Profile from '@/pages/Profile';
+=======
+import Notifications from '@/pages/Notifications';
+>>>>>>> 158dacc (Updated notifications)
 import AppLayout from '@/components/layout/AppLayout';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -41,7 +45,11 @@ function App() {
           <Route path="expenses" element={<Expenses />} />
           <Route path="reports" element={<Reports />} />
           <Route path="analytics" element={<Analytics />} />
+<<<<<<< HEAD
           <Route path="profile" element={<Profile />} />
+=======
+          <Route path="notifications" element={<Notifications />} />
+>>>>>>> 158dacc (Updated notifications)
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,5 +1,6 @@
 import { useDataStore } from '../store/data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -7,16 +8,49 @@ import {
 } from 'recharts';
 import { 
   Truck, Map, Wrench, AlertTriangle, Activity,
-  Plus, Fuel, DollarSign, Gauge
+  Plus, Fuel, DollarSign, Gauge, Check, Trash2, CheckCircle2, AlertCircle, Info, Bell, ArrowRight
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { useNotificationStore, formatTimeAgo } from '../store/notifications';
+import { useAuthStore } from '../store/auth';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Dashboard() {
-  const { vehicles, drivers, trips, fuelLogs, expenses } = useDataStore();
+  const { vehicles, trips, fuelLogs, expenses } = useDataStore();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const { 
+    notifications, 
+    markAsRead, 
+    deleteNotification 
+  } = useNotificationStore();
+
+  // Filter role-specific notifications
+  const roleNotifications = useMemo(() => {
+    if (!user) return [];
+    return notifications.filter(n => n.roles.includes(user.role));
+  }, [notifications, user]);
+
+  const unreadCount = useMemo(() => {
+    return roleNotifications.filter(n => !n.read).length;
+  }, [roleNotifications]);
+
+  const recentDashboardNotifications = useMemo(() => {
+    return [...roleNotifications]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 5);
+  }, [roleNotifications]);
+
+  // Alerts requiring immediate attention: error or warning category, unread
+  const immediateAlerts = useMemo(() => {
+    return roleNotifications
+      .filter(n => (n.category === 'error' || n.category === 'warning' || n.priority === 'high') && !n.read)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 5);
+  }, [roleNotifications]);
 
   // Calculate Operational KPIs
   const activeVehicles = vehicles.filter(v => v.status === 'On Trip').length;
@@ -369,57 +403,153 @@ export default function Dashboard() {
 
       {/* Bottom Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Action Required */}
-        <Card className="glass-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
-              Action Required
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {drivers.filter(d => {
-                const expiryDate = new Date(d.licenseExpiry);
-                const now = new Date();
-                const diffTime = Math.abs(expiryDate.getTime() - now.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                return diffDays < 30 || expiryDate < now;
-              }).map(driver => (
-                <div key={driver.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-border">
-                  <div>
-                    <p className="font-medium">{driver.name}</p>
-                    <p className="text-xs text-muted-foreground">License expires: {driver.licenseExpiry}</p>
-                  </div>
-                  <Button variant="outline" size="sm">Renew</Button>
+        {/* Alerts Requiring Immediate Attention */}
+        <Card className="glass-card flex flex-col justify-between">
+          <div>
+            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+              <div className="space-y-1 pr-4">
+                <CardTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                  <AlertCircle className="w-5 h-5" />
+                  Alerts Requiring Attention
+                </CardTitle>
+                <CardDescription>System-critical alerts and unresolved warning notifications.</CardDescription>
+              </div>
+              {immediateAlerts.length > 0 && (
+                <Badge variant="destructive" className="animate-pulse flex-shrink-0">{immediateAlerts.length} Actionable</Badge>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
+              {immediateAlerts.length > 0 ? (
+                <div className="space-y-3">
+                  {immediateAlerts.map(alert => {
+                    const iconColor = alert.category === 'error' ? 'text-rose-500 bg-rose-500/10' : 'text-amber-500 bg-amber-500/10';
+                    return (
+                      <div key={alert.id} className="flex items-start justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-border">
+                        <div className="flex gap-3 min-w-0">
+                          <div className={`p-2 rounded-lg flex-shrink-0 mt-0.5 ${iconColor}`}>
+                            {alert.category === 'error' ? <AlertCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{alert.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{alert.description}</p>
+                            <span className="text-[10px] text-muted-foreground font-medium block mt-1">{formatTimeAgo(alert.timestamp)}</span>
+                          </div>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-xs font-semibold text-primary hover:bg-primary/10 flex-shrink-0"
+                          onClick={() => markAsRead(alert.id)}
+                        >
+                          Resolve
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-              {drivers.length === 0 && <p className="text-sm text-muted-foreground">No drivers need attention.</p>}
+              ) : (
+                <div className="py-8 text-center flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center mb-3">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <h4 className="font-bold text-sm text-slate-700 dark:text-slate-300">All Systems Normal</h4>
+                  <p className="text-xs text-muted-foreground mt-1">No pending warnings or error alerts require immediate attention.</p>
+                </div>
+              )}
+            </CardContent>
+          </div>
+          {immediateAlerts.length > 0 && (
+            <div className="p-4 border-t border-border bg-slate-50/50 dark:bg-slate-900/50 rounded-b-2xl flex justify-end">
+              <Button variant="ghost" size="sm" className="text-xs font-semibold text-primary" onClick={() => navigate('/notifications')}>
+                Audit All Alerts <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
             </div>
-          </CardContent>
+          )}
         </Card>
         
-        {/* Recent Activity */}
-        <Card className="glass-card">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {trips.slice(0, 4).map(trip => (
-                <div key={trip.id} className="flex items-start gap-4">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mt-0.5">
-                    <Map className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Trip {trip.id} {trip.status}</p>
-                    <p className="text-xs text-muted-foreground">{trip.source} → {trip.destination}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">{new Date(trip.date).toLocaleString()}</p>
-                  </div>
+        {/* Recent Notifications */}
+        <Card className="glass-card flex flex-col justify-between">
+          <div>
+            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+              <div className="space-y-1 pr-4">
+                <CardTitle className="flex items-center gap-2 text-primary">
+                  <Bell className="w-5 h-5" />
+                  Recent Notifications
+                </CardTitle>
+                <CardDescription>Latest alerts dispatched to your user account role.</CardDescription>
+              </div>
+              {unreadCount > 0 && (
+                <Badge className="bg-primary/10 text-primary border-primary/20 flex-shrink-0">{unreadCount} Unread</Badge>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
+              {recentDashboardNotifications.length > 0 ? (
+                <div className="space-y-3">
+                  {recentDashboardNotifications.map(n => {
+                    const iconColor = 
+                      n.category === 'success' ? 'text-emerald-500 bg-emerald-500/10' :
+                      n.category === 'warning' ? 'text-amber-500 bg-amber-500/10' :
+                      n.category === 'error' ? 'text-rose-500 bg-rose-500/10' :
+                      'text-blue-500 bg-blue-500/10';
+                    const icon = 
+                      n.category === 'success' ? <CheckCircle2 className="w-4 h-4" /> :
+                      n.category === 'warning' ? <AlertTriangle className="w-4 h-4" /> :
+                      n.category === 'error' ? <AlertCircle className="w-4 h-4" /> :
+                      <Info className="w-4 h-4" />;
+                    return (
+                      <div key={n.id} className={`flex items-start justify-between gap-3 p-3 rounded-xl border transition-colors ${!n.read ? 'bg-primary/5 dark:bg-primary/10 border-primary/20' : 'bg-slate-50/30 dark:bg-slate-900/10 border-border'}`}>
+                        <div className="flex gap-3 min-w-0">
+                          <div className={`p-2 rounded-lg flex-shrink-0 mt-0.5 ${iconColor}`}>
+                            {icon}
+                          </div>
+                          <div className="min-w-0">
+                            <p className={`text-xs font-semibold text-slate-800 dark:text-slate-200 ${!n.read ? 'font-bold' : ''}`}>{n.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-1">{n.description}</p>
+                            <span className="text-[10px] text-muted-foreground font-medium block mt-1">{formatTimeAgo(n.timestamp)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {!n.read && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-850"
+                              onClick={() => markAsRead(n.id)}
+                              title="Mark as read"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 rounded-full hover:bg-rose-100 dark:hover:bg-rose-950/30 text-muted-foreground hover:text-rose-600"
+                            onClick={() => deleteNotification(n.id)}
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          </CardContent>
+              ) : (
+                <div className="py-8 text-center flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-3">
+                    <Bell className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <h4 className="font-bold text-sm text-slate-700 dark:text-slate-300">No Notifications</h4>
+                  <p className="text-xs text-muted-foreground mt-1">There are no recent notifications to display.</p>
+                </div>
+              )}
+            </CardContent>
+          </div>
+          <div className="p-4 border-t border-border bg-slate-50/50 dark:bg-slate-900/50 rounded-b-2xl flex justify-end">
+            <Button variant="ghost" size="sm" className="text-xs font-semibold text-primary" onClick={() => navigate('/notifications')}>
+              View Full History <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            </Button>
+          </div>
         </Card>
       </div>
     </div>

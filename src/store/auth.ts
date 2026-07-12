@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useNotificationStore } from './notifications';
 
 export type Role = 'Fleet Manager' | 'Dispatcher' | 'Safety Officer' | 'Financial Analyst' | 'Driver' | 'Admin';
 
@@ -285,7 +286,21 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Accept any password for mock demo, just check email
     if (foundUser) {
       set({ user: foundUser, isAuthenticated: true });
+      useNotificationStore.getState().addNotification({
+        title: 'Successful Login',
+        description: `User ${foundUser.name} (${foundUser.role}) has signed in.`,
+        category: 'success',
+        roles: [foundUser.role, 'Fleet Manager'],
+        priority: 'low'
+      });
     } else {
+      useNotificationStore.getState().addNotification({
+        title: 'Failed Login Attempt',
+        description: `Failed login attempt for account email: "${email}".`,
+        category: 'error',
+        roles: ['Fleet Manager'],
+        priority: 'high'
+      });
       throw new Error('Invalid credentials. Try manager@transitops.com');
     }
   },

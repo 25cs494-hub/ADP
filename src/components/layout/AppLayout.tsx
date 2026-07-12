@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
+import { useNotificationStore, formatTimeAgo } from '../../store/notifications';
+import { useDataStore } from '../../store/data';
+import { toast } from 'sonner';
 import { 
   LayoutDashboard, 
   Truck, 
@@ -18,7 +21,13 @@ import {
   Moon,
   Sun,
   LogOut,
-  Menu
+  Menu,
+  CheckCircle2, 
+  AlertTriangle, 
+  AlertCircle, 
+  Info, 
+  Check, 
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +38,20 @@ import { Badge } from '@/components/ui/badge';
 export default function AppLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
+  
+  const dataState = useDataStore();
+  const { 
+    notifications, 
+    markAsRead, 
+    markAllAsRead, 
+    deleteNotification, 
+    clearAll, 
+    checkSmartAlerts,
+    addNotification
+  } = useNotificationStore();
+
   const [isDark, setIsDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -64,6 +87,67 @@ export default function AppLayout() {
   ];
 
   const allowedNavItems = navItems.filter(item => user?.role && item.roles.includes(user.role));
+
+  // Run checkSmartAlerts whenever the data changes
+  useEffect(() => {
+    checkSmartAlerts(dataState);
+  }, [dataState, checkSmartAlerts]);
+
+  // Route Role Authorization Guard & unauthorized access attempt logging
+  useEffect(() => {
+    if (!user) return;
+    const activeItem = navItems.find(item => item.path === pathname);
+    if (activeItem && !activeItem.roles.includes(user.role)) {
+      // Create security alert
+      addNotification({
+        title: 'Unauthorized Access Attempt',
+        description: `User ${user.name} (${user.role}) attempted to access restricted page: ${activeItem.name} (${pathname}).`,
+        category: 'error',
+        roles: ['Fleet Manager'],
+        priority: 'high'
+      });
+      
+      // Redirect
+      navigate('/dashboard');
+      
+      // Alert user
+      toast.error(`Access Denied: You do not have permission to view ${activeItem.name}.`);
+    }
+  }, [pathname, user, navigate, addNotification]);
+
+  const roleNotifications = notifications.filter(n => user?.role && n.roles.includes(user.role));
+  const unreadCount = roleNotifications.filter(n => !n.read).length;
+  const recentNotifications = [...roleNotifications]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 5);
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'success':
+        return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+      case 'warning':
+        return <AlertTriangle className="w-4 h-4 text-amber-500" />;
+      case 'error':
+        return <AlertCircle className="w-4 h-4 text-rose-500" />;
+      case 'info':
+      default:
+        return <Info className="w-4 h-4 text-blue-500" />;
+    }
+  };
+
+  const getCategoryBg = (category: string) => {
+    switch (category) {
+      case 'success':
+        return 'bg-emerald-500/10 dark:bg-emerald-500/20';
+      case 'warning':
+        return 'bg-amber-500/10 dark:bg-amber-500/20';
+      case 'error':
+        return 'bg-rose-500/10 dark:bg-rose-500/20';
+      case 'info':
+      default:
+        return 'bg-blue-500/10 dark:bg-blue-500/20';
+    }
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
@@ -125,10 +209,132 @@ export default function AppLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-destructive rounded-full" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative hover:bg-slate-100 dark:hover:bg-slate-800">
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900">
+                      {unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[340px] md:w-[400px] p-0 glass-card" align="end" forceMount>
+                <div className="p-4 border-b border-border flex items-center justify-between bg-white dark:bg-slate-900 rounded-t-2xl">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">Notifications</span>
+                    {unreadCount > 0 && (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5 font-bold">
+                        {unreadCount} new
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {unreadCount > 0 && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 text-xs text-primary hover:bg-primary/10 px-2 py-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (user?.role) markAllAsRead(user.role);
+                        }}
+                      >
+                        Mark all as read
+                      </Button>
+                    )}
+                    {roleNotifications.length > 0 && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 text-xs text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 px-2 py-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (user?.role) clearAll(user.role);
+                        }}
+                      >
+                        Clear all
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="max-h-[300px] overflow-y-auto divide-y divide-border bg-white dark:bg-slate-900">
+                  {recentNotifications.length > 0 ? (
+                    recentNotifications.map((n) => (
+                      <div 
+                        key={n.id} 
+                        className={`flex items-start gap-3 p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer ${!n.read ? 'bg-primary/5 dark:bg-primary/10' : ''}`}
+                        onClick={() => markAsRead(n.id)}
+                      >
+                        <div className={`p-2 rounded-lg flex-shrink-0 ${getCategoryBg(n.category)}`}>
+                          {getCategoryIcon(n.category)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-1">
+                            <p className={`text-xs font-semibold text-slate-800 dark:text-slate-100 ${!n.read ? 'font-bold' : ''}`}>
+                              {n.title}
+                            </p>
+                            <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
+                              {formatTimeAgo(n.timestamp)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                            {n.description}
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-1 flex-shrink-0">
+                          {!n.read && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markAsRead(n.id);
+                              }}
+                              title="Mark as read"
+                            >
+                              <Check className="h-3.5 w-3.5 text-slate-500" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 rounded-full hover:bg-rose-100 dark:hover:bg-rose-950/30 text-muted-foreground hover:text-rose-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteNotification(n.id);
+                            }}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center text-xs text-muted-foreground">
+                      No notifications found for {user?.role}.
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-2 border-t border-border text-center bg-slate-50/50 dark:bg-slate-900/50 rounded-b-2xl">
+                  <Button
+                    variant="ghost"
+                    className="w-full text-xs font-semibold text-primary hover:bg-slate-100 dark:hover:bg-slate-800"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate('/notifications');
+                    }}
+                  >
+                    View Notification History
+                  </Button>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
             
             <Button variant="ghost" size="icon" onClick={toggleTheme}>
               {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
