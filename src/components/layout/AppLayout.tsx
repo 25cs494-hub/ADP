@@ -25,12 +25,35 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { useNotificationStore } from '../../store/notifications';
+import NotificationDrawer from './NotificationDrawer';
+import { motion } from 'framer-motion';
 
 export default function AppLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Notifications store subscription
+  const { notifications, toggleDrawer, bellShaking, setBellShaking } = useNotificationStore();
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Auto-arrival mock notification trigger (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      useNotificationStore.getState().spawnMockNotification();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Reset bell shaking after animation completes
+  useEffect(() => {
+    if (bellShaking) {
+      const timer = setTimeout(() => setBellShaking(false), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [bellShaking, setBellShaking]);
 
   // Initial theme check
   useEffect(() => {
@@ -125,9 +148,32 @@ export default function AppLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-destructive rounded-full" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="relative rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => toggleDrawer(true)}
+            >
+              <motion.div
+                animate={bellShaking ? {
+                  rotate: [0, -15, 12, -10, 8, -4, 2, 0],
+                  scale: [1, 1.15, 1.15, 1.15, 1.1, 1, 1, 1]
+                } : { rotate: 0, scale: 1 }}
+                transition={{ duration: 0.6 }}
+              >
+                <Bell className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
+              </motion.div>
+              {unreadCount > 0 && (
+                <motion.span 
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  key={unreadCount}
+                  transition={{ type: 'spring', stiffness: 500, damping: 15 }}
+                  className="absolute top-1 right-1 px-1 min-w-[16px] h-4 text-[9px] font-bold font-mono flex items-center justify-center bg-destructive text-destructive-foreground rounded-full shadow-sm"
+                >
+                  {unreadCount}
+                </motion.span>
+              )}
             </Button>
             
             <Button variant="ghost" size="icon" onClick={toggleTheme}>
@@ -180,6 +226,7 @@ export default function AppLayout() {
           <Outlet />
         </div>
       </main>
+      <NotificationDrawer />
     </div>
   );
 }
