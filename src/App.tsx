@@ -40,6 +40,7 @@ function App() {
           <Route path="expenses" element={<Expenses />} />
           <Route path="reports" element={<Reports />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="reports" element={<Analytics />} />
         </Route>
       </Routes>
     </BrowserRouter>
