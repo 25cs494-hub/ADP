@@ -55,7 +55,7 @@ export default function AppLayout() {
     { name: 'Drivers', path: '/drivers', icon: Users, roles: ['Fleet Manager', 'Dispatcher', 'Safety Officer'] },
     { name: 'Trips', path: '/trips', icon: Map, roles: ['Fleet Manager', 'Dispatcher'] },
     { name: 'Maintenance', path: '/maintenance', icon: Wrench, roles: ['Fleet Manager', 'Safety Officer'] },
-    { name: 'Fuel Logs', path: '/fuel', icon: Fuel, roles: ['Fleet Manager', 'Financial Analyst'] },
+    { name: 'Fuel Management', path: '/fuel-management', icon: Fuel, roles: ['Fleet Manager', 'Financial Analyst'] },
     { name: 'Expenses', path: '/expenses', icon: DollarSign, roles: ['Fleet Manager', 'Financial Analyst'] },
     { name: 'Reports', path: '/reports', icon: FileText, roles: ['Fleet Manager', 'Financial Analyst'] },
     { name: 'Analytics', path: '/analytics', icon: BarChart3, roles: ['Fleet Manager', 'Financial Analyst'] },
@@ -159,6 +159,11 @@ export default function AppLayout() {
                       <Badge variant="secondary" className="mt-2 w-fit text-xs">{user?.role}</Badge>
                     </div>
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/profile')}>
+                    <UserIcon className="mr-2 h-4 w-4" />
+                    <span>My Profile</span>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />
